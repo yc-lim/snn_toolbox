@@ -18,3 +18,4 @@ __pycache__
 *.h5
 *.npz
 *.json
+.ipynb_checkpoints/

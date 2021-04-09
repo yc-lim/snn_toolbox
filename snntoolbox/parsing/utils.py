@@ -221,6 +221,51 @@ class AbstractModelParser:
                     'kernel_size': 1})
                 name_map[str(id(layer))] = idx
                 idx += 1
+            
+            ##### Added code #####
+            
+            # TF 2.1.0: 
+            # if layer_type == "TensorFlowOpLayer":
+              # if layer.node_def.op == "SplitV":
+                # print("Replace Split layer/array slice by Conv2D.")
+            
+            # TF 2.4.1
+            if layer_type == "TFOpLambda":
+              if layer.symbol == "split":
+                const_dims, in_dim = layer.input_shape[1:-1], layer.input_shape[-1]
+                out_shapes = layer.output_shape
+                if all(os[1:-1] == const_dims for os in out_shapes):
+                  print("Replace tf.split layer by Dense for splitting over last dim.")
+                  _layer_type = "Dense"
+                  in_layer = self.get_inbound_names(layer, name_map)
+                  t = 0
+                  
+                  for os in out_shapes:
+                    num_str = self.format_layer_idx(idx)
+                    shape_str = "x".join([str(d) for d in const_dims+(out_dim,)])
+                    out_dim = os[-1]
+                    weights = np.zeros([in_dim, out_dim])
+                    for _ in range(out_dim):
+                      weights[t,i] = 1
+                      t += 1
+                    
+                    self._layer_list.append({
+                        "name": num_str + _layer_type + "_" + shape_str,
+                        "layer_type": _layer_type,
+                        "inbound": in_layer,
+                        "units": out_dim,
+                        "activation": "relu",  # Default nonlinearity of SNN,
+                        "use_bias": True,
+                        "parameters": (weights, np.zeros(out_dim))})
+                    name_map[str(id(layer))] = idx
+                    idx += 1
+                  continue
+                else:
+                  print("TODO:: Replace tf.split layer by Conv? for splitting over dimension other than last.")
+              else:
+                print("Other TFOpLambda layers not in [split]")
+                
+            ######################
 
             if layer_type not in snn_layers:
                 print("Skipping layer {}.".format(layer_type))
