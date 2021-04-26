@@ -116,6 +116,10 @@ class AbstractModelParser:
         name_map = {}
         idx = 0
         inserted_flatten = False
+        ##### Added code #####
+        import collections
+        inserted_before = collections.defaultdict(list)
+        ######################
         for layer in layers:
             layer_type = self.get_type(layer)
 
@@ -187,9 +191,6 @@ class AbstractModelParser:
 
             if layer_type == 'Add':
                 print("Replacing Add layer by Concatenate plus Conv.")
-                ##### Added code #####
-                print(f"add inbound 1 = {self.get_inbound_names(layer, name_map)}")
-                ######################
                 shape = layer.output_shape
                 if IS_CHANNELS_FIRST:
                     axis = 1
@@ -208,9 +209,6 @@ class AbstractModelParser:
                     'axis': axis})
                 name_map[_layer_type + str(idx)] = idx
                 idx += 1
-                ##### Added code #####
-                print(f"add inbound 2 = {self._layer_list[-1]['name']}, {self._layer_list[-1]}")
-                ######################
                 _layer_type = 'Conv2D'
                 num_str = self.format_layer_idx(idx)
                 shape_str = '{}x{}x{}'.format(*shape[1:])
@@ -234,44 +232,51 @@ class AbstractModelParser:
             # if layer_type == "TensorFlowOpLayer":
               # if layer.node_def.op == "SplitV":
                 # print("Replace Split layer/array slice by Conv2D.")
+            ##### Added code #####
+            # print(f"add inbound 2 = {self._layer_list[-1]['name']}, {self._layer_list[-1]}")
+            ######################
 
             # TF 2.4.1
             if layer_type == "TFOpLambda":
-              if layer.symbol == "split":
-                const_dims, in_dim = layer.input_shape[1:-1], layer.input_shape[-1]
-                out_shapes = layer.output_shape
-                if all(os[1:-1] == const_dims for os in out_shapes):
-                  print("Replace tf.split layer by Dense for splitting over last dim.")
-                  _layer_type = "Dense"
-                  in_layer = self.get_inbound_names(layer, name_map)
-                  t = 0
+                if layer.symbol == "split":
+                    const_dims, in_dim = layer.input_shape[1:-1], layer.input_shape[-1]
+                    out_shapes = layer.output_shape
+                    if all(os[1:-1] == const_dims for os in out_shapes):
+                        print("Replace tf.split layer by Dense for splitting over last dim.")
+                        _layer_type = "Dense"
+                        in_layer = self.get_inbound_names(layer, name_map)
+                        out_layers = self.get_outbound_layers(layer)
+                        t = 0
 
-                  for os in out_shapes:
-                    num_str = self.format_layer_idx(idx)
-                    shape_str = "x".join([str(d) for d in const_dims+(out_dim,)])
-                    out_dim = os[-1]
-                    weights = np.zeros([in_dim, out_dim])
-                    for _ in range(out_dim):
-                      weights[t,i] = 1
-                      t += 1
+                        for k, os in enumerate(out_shapes):
+                            num_str = self.format_layer_idx(idx)
+                            out_dim = os[-1]
+                            shape_str = "x".join([str(d) for d in const_dims + (out_dim,)])
+                            new_layer_name = num_str + _layer_type + "_" + shape_str
+                            weights = np.zeros([in_dim, out_dim])
 
-                    self._layer_list.append({
-                        "name": num_str + _layer_type + "_" + shape_str,
-                        "layer_type": _layer_type,
-                        "inbound": in_layer,
-                        "units": out_dim,
-                        "activation": "relu",  # Default nonlinearity of SNN,
-                        "use_bias": True,
-                        "parameters": (weights, np.zeros(out_dim))})
-                    name_map[str(id(layer))] = idx
-                    idx += 1
-                  continue
+                            for i in range(out_dim):
+                                weights[t, i] = 1
+                                t += 1
+
+                            self._layer_list.append({
+                                "name": new_layer_name,
+                                "layer_type": _layer_type,
+                                "inbound": in_layer,
+                                "units": out_dim,
+                                "activation": "relu",  # Default nonlinearity of SNN,
+                                "use_bias": True,
+                                "parameters": (weights, np.zeros(out_dim))})
+                            name_map[new_layer_name] = idx
+                            idx += 1
+                            inserted_before[out_layers[k]].append(new_layer_name)
+                    else:
+                        print("TODO: Replace tf.split layer by Conv? for splitting over dimension other than last.")
+                        raise NotImplementedError
+                    continue
                 else:
-                  print("TODO: Replace tf.split layer by Conv? for splitting over dimension other than last.")
-                  raise NotImplementedError
-              else:
-                print("TODO: Other TFOpLambda layers not in [split]")
-                raise NotImplementedError
+                    print("TODO: Other TFOpLambda layers not in [split]")
+                    raise NotImplementedError
 
             ######################
 
@@ -291,10 +296,18 @@ class AbstractModelParser:
                 print("Replacing max by average pooling.")
                 layer_type = 'AveragePooling2D'
 
+            ##### Added code #####
+            print(f"name_map = {name_map}")
+            ######################
+
             # If we inserted a layer, need to set the right inbound layer here.
             if inserted_flatten:
                 inbound = [self._layer_list[-1]['name']]
                 inserted_flatten = False
+            ##### Added code #####
+            elif layer in inserted_before:
+                inbound = inserted_before[layer]
+            ######################
             else:
                 inbound = self.get_inbound_names(layer, name_map)
 

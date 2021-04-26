@@ -170,13 +170,31 @@ def normalize_parameters(model, config, **kwargs):
             parameters_norm = [parameters[0], parameters[1] / scale_fac]
             if parameters[0].ndim == 4:
                 # In conv layers, just need to split up along channel dim.
-                offset = 0  # Index offset at input filter dimension
+                #### Removed code ####
+                # offset = 0  # Index offset at input filter dimension
+                # for inb in inbound:
+                #     f_out = inb.filters  # Num output features of inbound layer
+                #     f_in = range(offset, offset + f_out)
+                #     parameters_norm[0][:, :, f_in, :] *= \
+                #         scale_facs[inb.name] / scale_fac
+                #     offset += f_out
+                ##### Added code #####
+                # Above manipulation assumes Concat([Conv2D], axis=<channel axis>) -> Conv2D,
+                # none of the inbound and current layers are Dense or other types,
+                # with no Reshape/Flatten in between.
+
+                # Instead, below uses the maximum inbound scale factor across all inbound layers,
+                # adjusting scaling of previous layers if necessary.
+
+                max_scale_fac = max([scale_facs[inb.name] for inb in inbound])
                 for inb in inbound:
-                    f_out = inb.filters  # Num output features of inbound layer
-                    f_in = range(offset, offset + f_out)
-                    parameters_norm[0][:, :, f_in, :] *= \
-                        scale_facs[inb.name] / scale_fac
-                    offset += f_out
+                    params = inb.get_weights()
+                    params[0] *= scale_facs[inb.name] / max_scale_fac
+
+                parameters_norm[0] *= max_scale_fac / scale_fac
+
+                print(f"  Adjusting scale_fac, max_scale_fac = {max_scale_fac}")
+                ######################
             else:
                 # Fully-connected layers need more consideration, because they
                 # could receive input from several conv layers that are

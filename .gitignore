@@ -19,3 +19,4 @@ __pycache__
 *.npz
 *.json
 .ipynb_checkpoints/
+/snntb_mod.zip
