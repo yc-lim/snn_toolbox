@@ -152,6 +152,9 @@ def normalize_parameters(model, config, **kwargs):
         else:
             scale_fac = scale_facs[layer.name]
         inbound = get_inbound_layers_with_params(layer)
+        ##### Added code #####
+        print(f"{layer.name}: inbound = {len(inbound)}, {[l.name for l in inbound]}, scale_fac = {scale_fac} <-- {scale_facs[layer.name]}")
+        ######################
         if len(inbound) == 0:  # Input layer
             parameters_norm = [
                 parameters[0] * scale_facs[model.layers[0].name] / scale_fac,

@@ -187,6 +187,9 @@ class AbstractModelParser:
 
             if layer_type == 'Add':
                 print("Replacing Add layer by Concatenate plus Conv.")
+                ##### Added code #####
+                print(f"add inbound 1 = {self.get_inbound_names(layer, name_map)}")
+                ######################
                 shape = layer.output_shape
                 if IS_CHANNELS_FIRST:
                     axis = 1
@@ -205,6 +208,9 @@ class AbstractModelParser:
                     'axis': axis})
                 name_map[_layer_type + str(idx)] = idx
                 idx += 1
+                ##### Added code #####
+                print(f"add inbound 2 = {self._layer_list[-1]['name']}, {self._layer_list[-1]}")
+                ######################
                 _layer_type = 'Conv2D'
                 num_str = self.format_layer_idx(idx)
                 shape_str = '{}x{}x{}'.format(*shape[1:])
@@ -221,14 +227,14 @@ class AbstractModelParser:
                     'kernel_size': 1})
                 name_map[str(id(layer))] = idx
                 idx += 1
-            
+
             ##### Added code #####
-            
+
             # TF 2.1.0: 
             # if layer_type == "TensorFlowOpLayer":
               # if layer.node_def.op == "SplitV":
                 # print("Replace Split layer/array slice by Conv2D.")
-            
+
             # TF 2.4.1
             if layer_type == "TFOpLambda":
               if layer.symbol == "split":
@@ -239,7 +245,7 @@ class AbstractModelParser:
                   _layer_type = "Dense"
                   in_layer = self.get_inbound_names(layer, name_map)
                   t = 0
-                  
+
                   for os in out_shapes:
                     num_str = self.format_layer_idx(idx)
                     shape_str = "x".join([str(d) for d in const_dims+(out_dim,)])
@@ -248,7 +254,7 @@ class AbstractModelParser:
                     for _ in range(out_dim):
                       weights[t,i] = 1
                       t += 1
-                    
+
                     self._layer_list.append({
                         "name": num_str + _layer_type + "_" + shape_str,
                         "layer_type": _layer_type,
@@ -261,10 +267,12 @@ class AbstractModelParser:
                     idx += 1
                   continue
                 else:
-                  print("TODO:: Replace tf.split layer by Conv? for splitting over dimension other than last.")
+                  print("TODO: Replace tf.split layer by Conv? for splitting over dimension other than last.")
+                  raise NotImplementedError
               else:
-                print("Other TFOpLambda layers not in [split]")
-                
+                print("TODO: Other TFOpLambda layers not in [split]")
+                raise NotImplementedError
+
             ######################
 
             if layer_type not in snn_layers:
@@ -449,12 +457,22 @@ class AbstractModelParser:
                     inbound[ib] = self.get_inbound_layers(inbound[ib])[0]
                 else:
                     break
-        if len(self._layer_list) == 0 or \
-                any([self.get_type(inb) == 'InputLayer' for inb in inbound]):
-            return [self.input_layer_name]
-        else:
-            inb_idxs = [name_map[str(id(inb))] for inb in inbound]
-            return [self._layer_list[i]['name'] for i in inb_idxs]
+        ##### Added code #####
+        in_names = []
+        for inb in inbound:
+            if self.get_type(inb) == "InputLayer":
+                in_names.append(self.input_layer_name)
+            else:
+                in_names.append(self._layer_list[name_map[str(id(inb))]]['name'])
+        return in_names
+        #### Removed code ####
+        # if len(self._layer_list) == 0 or \
+        #         any([self.get_type(inb) == 'InputLayer' for inb in inbound]):
+        #     return [self.input_layer_name]
+        # else:
+        #     inb_idxs = [name_map[str(id(inb))] for inb in inbound]
+        #     return [self._layer_list[i]['name'] for i in inb_idxs]
+        ######################
 
     @abstractmethod
     def get_inbound_layers(self, layer):
@@ -852,6 +870,9 @@ class AbstractModelParser:
             if hasattr(keras.layers, layer_type):
                 parsed_layer = getattr(keras.layers, layer_type)
             else:
+                ##### Added code #####
+                print("import keras_rewiring @ parsing\\utils line 855, error.")
+                ######################
                 import keras_rewiring
                 parsed_layer = getattr(keras_rewiring.sparse_layer, layer_type)
 
@@ -859,6 +880,9 @@ class AbstractModelParser:
             if len(inbound) == 1:
                 inbound = inbound[0]
             check_for_custom_activations(layer)
+            ##### Added code #####
+            print(f"parsed_layer = {parsed_layer.name}, layer = {layer}")
+            ######################
             parsed_layers[layer['name']] = parsed_layer(**layer)(inbound)
 
         print("Compiling parsed model...\n")
