@@ -232,9 +232,6 @@ class AbstractModelParser:
             # if layer_type == "TensorFlowOpLayer":
               # if layer.node_def.op == "SplitV":
                 # print("Replace Split layer/array slice by Conv2D.")
-            ##### Added code #####
-            # print(f"add inbound 2 = {self._layer_list[-1]['name']}, {self._layer_list[-1]}")
-            ######################
 
             # TF 2.4.1
             if layer_type == "TFOpLambda":

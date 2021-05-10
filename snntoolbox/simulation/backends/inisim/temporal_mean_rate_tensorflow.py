@@ -38,7 +38,15 @@ class SpikeLayer(Layer):
             # Todo: Enable loading config here. Needed when trying to load a
             #       converted SNN from disk. For now we specify a dummy path.
             try:
-                self.config = load_config('wdir/log/gui/test/.config')
+                ##### Added code #####
+                import glob
+                from snntoolbox.bin.utils import update_setup
+                cfg_file = sorted([fn for fn in glob.glob(
+                    os.path.join("/content/drive/MyDrive/Dissertation Project/snntb", "cfg *.txt"))])[-1]
+                self.config = update_setup(cfg_file)
+                #### Removed code ####
+                # self.config = load_config('wdir/log/gui/test/.config')
+                ######################
             except FileNotFoundError:
                 raise NotImplementedError
         self.layer_type = self.class_name
