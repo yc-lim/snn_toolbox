@@ -891,7 +891,7 @@ class AbstractModelParser:
                 inbound = inbound[0]
             check_for_custom_activations(layer)
             ##### Added code #####
-            print(f"parsed_layer = {parsed_layer.name}, layer = {layer}")
+            # print(f"parsed_layer = {parsed_layer.name}, layer = {layer}")
             ######################
             parsed_layers[layer['name']] = parsed_layer(**layer)(inbound)
 
