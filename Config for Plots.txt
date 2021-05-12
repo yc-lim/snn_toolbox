@@ -1,0 +1,152 @@
+
+
+##### pv #####
+activations                 # <L>\0Activations, 1
+spiketrains                 # <L>\7Spiketrains
+spikecounts                 # Total_spike_count
+spikerates                  # <L>\1Spikerates, <L>\4Spikerates_distribution, 2
+input_image                 # input_image, 
+error_t                     # Error_vs_time
+confusion_matrix            # Confusion
+correlation                 # Pearson, <L>\5Correlation, 1
+hist_spikerates_activations # Activity_distribution, 1
+normalization_activations   # normalization\<L>_{{Weight, Activation}_distribution, maximum_activity_distribution}
+operations                  # operations_t
+v_mem                       # [Potential, not for INIsim]
+all                         # all
+  1+2                       # <L>\Activations_minus_Spikerates
+##### lv #####
+activations_n_b_l           # 
+spiketrains_n_b_l_t         # 
+input_b_l_t                 # input_rates, input_correlation
+mem_n_b_l_t                 # [Potential, not for INIsim]
+synaptic_operations_b_t     # 
+neuron_operations_b_t       # 
+all                         # all
+  ..                        # top1err_b_t, top5err_b_t, top1err_ann, top5err_ann, operations_ann, input_image_b_l, true_classes_b, spiketrains_n_b_l_t > avg_rate
+##############
+
+init_log_vars():
+  lv.input_b_l_t > input_b_l_t = np.0([*input_shape, _num_timesteps])
+
+  pv.{spiketrains, spikerates, correlation, spikecounts, hist_spikerates_activations} or
+  lv.spiketrains_n_b_l_t >
+    spiketrains_n_b_l_t = [(np.0([*L.output_shape, _num_timesteps]), L.name)
+                           for L in parsed_model.layers if is_spiking(L, _)]
+
+  cfg.conversion.spike_code == temporal_pattern >
+    spikerates_n_b_l = [(np.0(L.output_shape), L.name)
+                        for L in parsed_model.layers if is_spiking(L, _)]
+
+  pv.operations or lv.synaptic_operations_b_t >
+    synaptic_operations_b_t = np.0([batch_size, _num_timesteps])
+  
+  lv.neuron_operations_b_t > neuron_operations_b_t = np.0([batch_size, _num_timesteps])
+
+  lv.mem_n_b_l_t or pv.v_mem >
+    mem_n_b_l_t = [(np.0([*L.output_shape, _num_timesteps]), L.name)
+                        for L in parsed_model.layers if is_spiking(L, _)]
+
+  top1err_b_t = np.E([batch_size, _num_timesteps], np.bool)
+  top5err_b_t = np.E([batch_size, _num_timesteps], np.bool)
+
+
+run():
+  for batch_idx in range(num_batches):
+    pv.input_image >
+      plot_input_image(x_b_l[0], int(truth_b[0]), _, _)
+      input_b_l_t >
+        input_rates = np.count_nonzero(input_b_l_t[0], -1) / _duration
+        plot_input_image(input_rates, int(truth_b[0]), _, _, "input_rates")
+        plot_correlations(x_b_l[0], input_rates, _, "input_correlation")
+    
+    pv.error_t > 
+      plot_error_vs_time(top1err_b_t, top5err_b_t, _, _, top1err_ann, top5err_ann, _)
+    
+    synaptic_operations_b_t = np.cumsum(synaptic_operations_b_t / 1e6, 1)
+    neuron_operations_b_t = np.cumsum(neuron_operations_b_t / 1e6, 1)
+    
+    pv.confusion_matrix > plot_confusion_matrix(truth_d, guesses_d, _, _)
+    pv.operations > plot_ops_vs_time(synaptic_operations_b_t, _, _, _)
+    
+    pv.{activations, correlation, hist_spikerates_activations} || lv.activations_n_b_l >
+      print("Calculating activations...\n")
+      activations_n_b_l = get_activations_batch(_, x_b_l)
+    
+    LV[lv] = lv
+    LV[top1err_b_t     = top1err_b_t
+       top5err_b_t     = top5err_b_t
+       top1err_ann     = top1err_ann
+       top5err_ann     = top5err_ann
+       operations_ann  = operations_ann / 1e6
+       input_image_b_l = x_b_l
+       true_classes_b] = truth_b
+    
+    spiketrains_n_b_l_t >
+      lv[avg_rate] = get_avg_rate_from_trains()
+      print("Average spike rate: {} spikes per simulation time step.".format(lv[avg_rate]))
+    
+    np.savez_compressed("{path_log_vars}/{batch_idx}", **LV)
+    
+    pv.{activations, correlation, hist_spikerates_activations} >
+      PV[activations_n_b_l] = activations_n_b_l
+    pv.{spiketrains, spikerates, correlation, spikecounts, hist_spikerates_activations} >
+      PV[spiketrains_n_b_l_t] = spiketrains_n_b_l_t
+    spikerates_n_b_l >
+      PV[spikerates_n_b_l] = spikerates_n_b_l
+    
+    output_graphs(PV, _, _, 0, _)
+
+  pv.confusion_matrix >
+    plot_confusion_matrix(truth_d, guesses_d, _, _)
+
+output_graphs(PV, _, _, idx, _):
+  PV[activations_n_b_l] >
+    PV[activations_n_l] = get_sample_activity_from_batch(PV[activations_n_b_l], idx)
+  
+  PV[spiketrains_n_b_l_t] >
+    PV[spiketrains_n_l_t] = get_sample_activity_from_batch(PV[spiketrains_n_b_l_t], idx)
+    pv.{spikerates, correlation, hist_spikerates_activations} >
+      not PV[spikerates_n_b_l] >
+        PV[spikerates_n_b_l] = spiketrains_to_rates(PV[spiketrains_n_b_l_t], cfg.duration, cfg.spike_code)
+      PV[spikerates_n_l] = get_sample_activity_from_batch(PV[spikerates_n_b_l], idx)
+
+  plot_layer_summaries::(PV, _, _, _)
+    for i in range(num layers):
+      label = list(PV.values())[0][i][1]
+      name = extract_label(label)[1]  if cfg.output.use_simple_labels else label
+      print("Plotting layer {}".format(label))
+      newpath = "{path}/{label}"
+      
+      pv.spiketrains >
+        plot_spiketrains(PV[spiketrains_n_l_t][i], cfg.dt, newpath, _)
+      
+      pv.spikerates >
+        plot_layer_activity(PV[spikerates_n_l][i], "Spikerates", newpath, _)
+        plot_hist({"Spikerates": PV[spikerates_n_l][i][0].flatten()}, "Spikerates", name, newpath)
+      
+      pv.activations >
+        plot_layer_activity(PV["activations_n_l"][i], "Activations", newpath, _)
+      
+      pv.spikerates and PV[activations_n_l] >
+        activations_norm = PV[activations_n_l][i][0] / np.max(.)
+        rates_norm = PV[spikerates_n_l][i][0] / np.max(.) if np.max(.) != 0 else .
+        plot_layer_activity((activations_norm - rates_norm, name), "Activations_minus_Spikerates", newpath, (-1, 1), _)
+      
+      pv.correlation >
+        plot_layer_correlation(PV[spikerates_n_l][i][0].flatten(), PV[activations_n_l][i][0].flatten(), "ANN-SNN correlations\n of layer "+name, _, newpath, False)
+
+  print("Plotting batch run statistics...")
+  pv.spikecounts >
+      plot_spikecount_vs_time(PV[spiketrains_n_b_l_t], cfg.duration, cfg.dt, _)
+  
+  pv.correlation >
+      plot_pearson_coefficients(PV[spikerates_n_b_l], PV[activations_n_b_l], _, _)
+  
+  pv.hist_spikerates_activations >
+      s = [x[0].flatten() for x in PV[spikerates_n_b_l]]
+      a = [x[0].flatten() for x in PV[activations_n_b_l]]
+      plot_hist({"Spikerates": s, "Activations": a}, _)
+  print("Done.\n")
+
+

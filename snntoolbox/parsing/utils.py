@@ -294,7 +294,7 @@ class AbstractModelParser:
                 layer_type = 'AveragePooling2D'
 
             ##### Added code #####
-            print(f"name_map = {name_map}")
+            # print(f"name_map = {name_map}")
             ######################
 
             # If we inserted a layer, need to set the right inbound layer here.

@@ -186,7 +186,7 @@ def normalize_parameters(model, config, **kwargs):
                 # Instead, below uses the maximum inbound scale factor across all inbound layers,
                 # adjusting scaling of previous layers if necessary.
 
-                max_scale_fac = min([scale_facs[inb.name] for inb in inbound])
+                max_scale_fac = max([scale_facs[inb.name] for inb in inbound])
                 for inb in inbound:
                     params = inb.get_weights()
                     params[0] *= scale_facs[inb.name] / max_scale_fac
